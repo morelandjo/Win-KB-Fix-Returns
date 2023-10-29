@@ -11,7 +11,9 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import com.johnbaccarat.win_kb_fix.core.interop;
 
-@Mixin(TitleScreen.class)
+@Mixin(
+        TitleScreen.class
+)
 public class MixinTitleScreen {
 
     private static Boolean Inited = false;

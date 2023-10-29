@@ -4,14 +4,25 @@ package com.johnbaccarat.win_kb_fix.wrappers;
 import com.johnbaccarat.win_kb_fix.Constants;
 import com.johnbaccarat.win_kb_fix.core.McWrapper;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.controls.KeyBindsScreen;
 
 public class mc implements McWrapper {
 
     Minecraft mc;
 
+    Class screenWithKeybindings;
+
     public mc(Minecraft m){
         mc = m;
+
+        try{
+            screenWithKeybindings = Class.forName("net.minecraft.class_6599"); //KeybindsScreen
+        }catch (Exception e){
+            try{
+                screenWithKeybindings =  Class.forName("net.minecraft.class_458"); // ControlsOptionsScreen
+            }catch (Exception e2){
+                error("Neither the KeyBindsScreen or the ControlsScreen class seems to exist.");
+            }
+        }
     }
 
     @Override
@@ -36,7 +47,14 @@ public class mc implements McWrapper {
 
     @Override
     public boolean redirectWinKey() {
-        return (mc.screen == null || mc.screen instanceof KeyBindsScreen) && mc.isWindowActive();
+        if (mc.isWindowActive()){
+            if(mc.screen == null){
+                return true;
+            }else{
+                return screenWithKeybindings != null ? screenWithKeybindings.isInstance(mc.screen) : false;
+            }
+        }
+        return false;
     }
 
     @Override

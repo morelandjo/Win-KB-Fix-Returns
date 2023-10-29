@@ -4,9 +4,7 @@ import com.sun.jna.Pointer;
 import com.sun.jna.platform.win32.*;
 import org.lwjgl.glfw.GLFWNativeWin32;
 
-import java.io.File;
 import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -14,14 +12,13 @@ import java.util.*;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
-public class interop {
+public abstract class interop {
     static boolean stickyKeysWasActiveAtStartup;
     static boolean enableStickyKeysOnExit = false;
     public static String mutexName = "Global-Minecraft-Windows-Keyboard-Fix";
     static WinUser.HHOOK hook;
     static boolean keyboardHooked = false;
 
-    static File f;
     static FileChannel fc;
 
     static Logger logger;
@@ -35,11 +32,11 @@ public class interop {
 
     static McWrapper wrapper;
 
-    static StickyKeyConfigLocation configLocation = null;
-
     public static void init(McWrapper w) {
 
         wrapper = w;
+
+        wrapper.info("Trying to disable sticky keys & hook keyboard");
 
         mutex = Kernel32.INSTANCE.CreateMutex(null, false, mutexName);
 
@@ -78,12 +75,6 @@ public class interop {
         }
     }
 
-    private enum StickyKeyConfigLocation{
-        Registry, // Saved in registry
-        Local; // No config
-    }
-
-
     public static void disableStickyKeys(){
         sk = skDisableStickyKeys(sk);
         u32.INSTANCE.SystemParametersInfoW(u32.SPI_SETSTICKYKEYS, sk.cbSize, sk, handle);
@@ -99,7 +90,6 @@ public class interop {
         }
 
         if(registry()){
-            configLocation = StickyKeyConfigLocation.Registry;
             return true;
         }
 
@@ -127,38 +117,32 @@ public class interop {
                 stillAlivePIDs.addAll(currentPIDs.stream().filter(c -> oldPIDs.stream().anyMatch(o -> c.equals(o))).collect(Collectors.toList()));
             }
 
+            // True if either other process is still alive or the last process that changed the setting crashed
+            Boolean stillChangedFromOtherProcess = (stillAlivePIDs.size() != 0 || (stillAlivePIDs.size() == 0 && oldPIDs.size() != 0));
+
             if(!m.containsKey("on exit change sticky keys to")){ // First time using mod
                 Advapi32Util.registrySetStringValue(WinReg.HKEY_CURRENT_USER, "SOFTWARE\\Minecraft\\Sticky Keys", "on exit change sticky keys to", stickyKeysWasActiveAtStartup?"enabled":"disabled");
             }else{
-                // If not same as current startup
+                // If saved sticky keys enabled/disabled setting not same as current startup
                 if(m.get("on exit change sticky keys to").equals("enabled") != stickyKeysWasActiveAtStartup){
                     if(oldPIDs.size() == 0){ // Empty -> User has changed the setting manually -> change to current
                         Advapi32Util.registrySetStringValue(WinReg.HKEY_CURRENT_USER, "SOFTWARE\\Minecraft\\Sticky Keys", "on exit change sticky keys to", stickyKeysWasActiveAtStartup?"enabled":"disabled");
                     }
-                    else if(stillAlivePIDs.size() != 0) { // Other process is still alive, last one to exit gets to change the value.
-                        stillAlivePIDs.add(pid);
-                        Advapi32Util.registrySetStringValue(WinReg.HKEY_CURRENT_USER,"SOFTWARE\\Minecraft\\Sticky Keys", "processes keeping sticky keys off", String.join(";", stillAlivePIDs.toArray(new String[0])));
-                        return true;
-                    }
                 }
             }
 
-            // No other process exists
-
-            if(!stickyKeysWasActiveAtStartup){
+            // No other process exists && the setting is already off -> Don't do anything
+            if(!stickyKeysWasActiveAtStartup && !stillChangedFromOtherProcess){
                 enableStickyKeysOnExit = false;
                 return true;
             }
 
-            if(!m.containsKey("processes keeping sticky keys off")){
-                Advapi32Util.registrySetStringValue(WinReg.HKEY_CURRENT_USER,"SOFTWARE\\Minecraft\\Sticky Keys", "processes keeping sticky keys off", pid);
-            }else {
-
-                if(!stillAlivePIDs.contains(pid)){
-                    stillAlivePIDs.add(pid);
-                }
-                Advapi32Util.registrySetStringValue(WinReg.HKEY_CURRENT_USER,"SOFTWARE\\Minecraft\\Sticky Keys", "processes keeping sticky keys off", String.join(";", stillAlivePIDs.toArray(new String[0])));
+            // Add our PID and write to registry
+            if(!stillAlivePIDs.contains(pid)){
+                stillAlivePIDs.add(pid);
             }
+            Advapi32Util.registrySetStringValue(WinReg.HKEY_CURRENT_USER,"SOFTWARE\\Minecraft\\Sticky Keys", "processes keeping sticky keys off", String.join(";", stillAlivePIDs.toArray(new String[0])));
+
             disableStickyKeys();
             enableStickyKeysOnExit = true;
         } catch (Exception e) {
@@ -193,7 +177,7 @@ public class interop {
         NoAccess,
         FileCreated,
         FileAlreadyExists;
-    };
+    }
 
     public static appdateFileReturn appdataFile(){
         Path p = Paths.get(System.getenv("APPDATA")).resolve(".minecraft");
@@ -229,6 +213,8 @@ public class interop {
 
     public static void resetStickyKeys(){
         if(enableStickyKeysOnExit){
+            wrapper.info("Trying to reset sticky keys");
+
             int dword_ret = Kernel32.INSTANCE.WaitForSingleObject(mutex, 5000);
             switch (dword_ret){
                 case WinError.WAIT_TIMEOUT:
@@ -304,6 +290,7 @@ public class interop {
 
     public static void unhookKeyboard(){
         if(keyboardHooked){
+            wrapper.info("Trying to unhook keyboard");
             if(User32.INSTANCE.UnhookWindowsHookEx(hook)){
                 keyboardHooked = false;
             }

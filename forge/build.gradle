@@ -1,11 +1,14 @@
 plugins {
     id 'idea'
-    id 'maven-publish'
     id 'net.minecraftforge.gradle'
     id 'org.spongepowered.mixin'
+/*    id 'com.github.johnrengelman.shadow'*/
 }
+
+jarJar.enable()
+
 base {
-    archivesName = "${mod_name}-forge-${minecraft_version}"
+    archivesName = "${mod_name}-forge-${minecraft_jar_version_range}"
 }
 mixin {
     add(sourceSets.main, "${mod_id}.refmap.json")
@@ -25,7 +28,6 @@ minecraft {
     if (file('src/main/resources/META-INF/accesstransformer.cfg').exists()) {
         accessTransformer = file('src/main/resources/META-INF/accesstransformer.cfg')
     }
-
     runs {
         client {
             workingDirectory project.file('run')
@@ -77,6 +79,8 @@ sourceSets.main.resources.srcDir 'src/generated/resources'
 dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
     compileOnly project(":common")
+    //jarJar(group: "org.slf4j", name: "slf4j-api", version:"[2.0.0]")
+    jarJar(group: "org.slf4j", name: "slf4j-simple", version:"[2.0.0]")
     annotationProcessor("org.spongepowered:mixin:0.8.5-SNAPSHOT:processor")
 }
 
@@ -94,19 +98,29 @@ processResources {
     from project(":common").sourceSets.main.resources
 }
 
-jar.finalizedBy('reobfJar')
 
-publishing {
-    publications {
-        mavenJava(MavenPublication) {
-            artifactId base.archivesName.get()
-            from components.java
-            fg.component(it)
-        }
+/*shadowJar {
+    manifest {
+
+        attributes(
+                "MixinConfigs" : "win_kb_fix.mixins.json,win_kb_fix.forge.mixins.json"
+        )
+        attributes.putAll( getAttributes())
     }
-    repositories {
-        maven {
-            url "file://" + System.getenv("local_maven")
-        }
+    dependencies {
+        include(dependency {
+            it.moduleGroup == 'org.slf4j'
+        })
+        include(project(":common"))
     }
-}
+
+    relocate 'org.slf4j', 'org.johnbaccarat.win_kb_fix.shaded.org.slf4j'
+    finalizedBy 'reobfShadowJar'
+}*/
+
+jar.finalizedBy('reobfJar')
+/*
+
+reobf {
+    shadowJar {}
+}*/
