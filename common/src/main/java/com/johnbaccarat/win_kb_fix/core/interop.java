@@ -154,20 +154,10 @@ public abstract class interop {
     private static List<String> getCurrentProcesses(){
         List<String> ret = new ArrayList<>();
 
-        try {
-            Process process = new ProcessBuilder("tasklist.exe", "/fo", "csv", "/nh").start();
-            new Thread(() -> {
-                Scanner sc = new Scanner(process.getInputStream());
-                if (sc.hasNextLine()) sc.nextLine();
-                while (sc.hasNextLine()) {
-                    String line = sc.nextLine();
-                    String[] parts = line.split(",");
-                    ret.add(parts[1].substring(1).replaceFirst(".$", ""));
-                }
-            }).start();
-            process.waitFor();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+        WinNT.HANDLE snapshot = Kernel32.INSTANCE.CreateToolhelp32Snapshot(Tlhelp32.TH32CS_SNAPPROCESS, new WinDef.DWORD(0));
+        Tlhelp32.PROCESSENTRY32.ByReference processEntry = new Tlhelp32.PROCESSENTRY32.ByReference();
+        while (Kernel32.INSTANCE.Process32Next(snapshot, processEntry)) {
+            ret.add(processEntry.th32ProcessID.toString());
         }
 
         return ret;
